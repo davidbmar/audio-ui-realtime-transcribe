@@ -1,233 +1,295 @@
-# CloudDrive with Audio Recording - Serverless Personal Cloud Platform
+# Real-Time Audio Intelligence Platform
 
-A modern, secure personal cloud platform built with AWS serverless technologies. Features both file management and audio recording capabilities with a beautiful responsive interface optimized for mobile devices.
+A serverless platform for intelligent audio recording with real-time transcription, analysis, and semantic search capabilities. Built for meeting intelligence, conversation analysis, and AI memory applications.
 
-## ✨ Key Features
+## 🚀 Key Features
 
-### 🎤 **Audio Recording System**
-- **Real-time Recording**: High-quality audio recording with MediaRecorder API
-- **Chunked Upload**: Automatic chunking (5s-5min configurable) with S3 upload
-- **Session Management**: Organized audio sessions with metadata
-- **Mobile Optimized**: Touch-friendly interface designed for iPhone recording
-- **Resumable Uploads**: Built-in retry logic for failed chunks
+### Core Capabilities
+- **🎤 Smart Audio Recording**: Browser-based chunked recording with configurable durations (5s-5min)
+- **📝 Live Transcription**: Real-time Whisper-powered transcription with <10s latency
+- **🧠 Intelligent Analysis**: Automatic topic extraction, decision detection, and entity recognition
+- **🔍 Semantic Search**: RAG-enabled search across active and historical recordings
+- **⏯️ Context-Aware Playback**: Instantly jump to relevant audio segments based on content
 
-### 📁 **Complete File Management**
-- **Secure Storage**: User-isolated S3 storage with JWT authentication
-- **Full CRUD Operations**: Upload, download, rename, move, delete files
-- **Folder Navigation**: Create and navigate nested folder structures
-- **Drag & Drop**: Modern file upload with progress tracking
+### Advanced Features
+- **Real-time Dashboard**: Live view of topics, decisions, and key moments during recording
+- **Speaker Diarization**: Identify and track different speakers
+- **Meeting Intelligence**: Automatic action items and decision tracking
+- **Time-Indexed Storage**: Direct timestamp access to any moment
+- **Parallel Processing**: Simultaneous transcription and analysis
 
-### 📱 **Mobile-First Design**
-- **Responsive Dashboard**: Intuitive landing page with app selection
-- **iOS Optimizations**: Native action sheets and touch targets
-- **Compact UI**: Vertically optimized for maximum content visibility
-- **Cross-Device**: Seamless experience across desktop, tablet, mobile
+## 🏗️ Architecture Overview
+
+Built on AWS serverless technologies for infinite scale and cost efficiency:
+
+```
+Frontend (React + WebSocket) → API Gateway → Lambda Functions
+                                                ↓
+                                            S3 Storage
+                                                ↓
+                                    Parallel Processing Pipeline
+                                    ├── Transcription (Whisper)
+                                    ├── Analysis (NLP)
+                                    └── Search Index (RAG)
+```
+
+## 📁 Project Structure
+
+```
+audio-intelligence-platform/
+├── api/                    # Lambda functions
+│   ├── recording/         # Audio upload & management
+│   ├── transcription/     # Whisper integration
+│   ├── analysis/          # NLP & topic extraction
+│   └── search/            # RAG & semantic search
+├── web/                   # React frontend
+│   ├── src/
+│   │   ├── components/    # UI components
+│   │   ├── hooks/         # Custom React hooks
+│   │   └── services/      # API & WebSocket clients
+│   └── public/
+├── infrastructure/        # AWS resource definitions
+├── scripts/              # Deployment automation
+└── docs/                 # Additional documentation
+```
 
 ## 🚀 Quick Start
 
 ### Prerequisites
-- AWS CLI installed and configured with sufficient permissions
-- Node.js (v14+) and npm installed
+- AWS Account with appropriate permissions
+- Node.js 18+ and npm
+- AWS CLI configured
 - Git
 
-### 1. Clone and Setup
+### Installation
+
+1. **Clone the repository**
 ```bash
-git clone https://github.com/davidbmar/audio-ui-cf-s3-lambda-cognito.git
-cd audio-ui-cf-s3-lambda-cognito
-chmod +x step-*.sh
+git clone https://github.com/yourusername/audio-intelligence-platform.git
+cd audio-intelligence-platform
 ```
 
-### 2. Deploy in Sequence
+2. **Run setup scripts in order**
 ```bash
-./step-10-setup.sh           # Initial AWS setup and configuration
-./step-20-deploy-lambda.sh   # Deploy Lambda functions and infrastructure  
-./step-25-update-web-files.sh # Deploy web interface with configuration
-./step-45-validation.sh      # Validate deployment
-./step-47-test-apis.sh       # Test API endpoints
+chmod +x scripts/step-*.sh
+./scripts/step-10-setup.sh              # Initial configuration
+./scripts/step-20-deploy-core.sh        # Deploy core infrastructure
+./scripts/step-30-deploy-frontend.sh    # Deploy web interface
+./scripts/step-40-enable-realtime.sh    # Enable WebSocket features
 ```
 
-### 3. Create Your First User
+3. **Access your platform**
+```
+Frontend: https://your-cloudfront-distribution.cloudfront.net
+WebSocket: wss://your-api-gateway.execute-api.region.amazonaws.com/prod
+```
+
+## 💡 Usage Examples
+
+### Recording a Meeting
+```javascript
+// Start recording with automatic chunking
+const session = await audioRecorder.startSession({
+  chunkDuration: 30,  // 30-second chunks
+  enableTranscription: true,
+  enableAnalysis: true
+});
+
+// Real-time updates via WebSocket
+session.on('transcription', (data) => {
+  console.log(`New transcript: ${data.text}`);
+});
+
+session.on('topics', (topics) => {
+  console.log(`Current topics: ${topics.join(', ')}`);
+});
+```
+
+### Searching Recordings
+```javascript
+// Semantic search across all recordings
+const results = await searchAPI.query({
+  question: "What did John say about the Q4 revenue projections?",
+  sessionId: "meeting-123" // Optional: search specific session
+});
+
+// Results include timestamp and context
+results.forEach(result => {
+  console.log(`Found at ${result.timestamp}: ${result.text}`);
+  // Play specific chunk: audioPlayer.playChunk(result.chunkId);
+});
+```
+
+## 🔧 Configuration
+
+### Environment Variables
+Create a `.env` file from the template:
 ```bash
-# Get your User Pool ID from the output or .env file
-aws cognito-idp admin-create-user \
-  --user-pool-id [YOUR_USER_POOL_ID] \
-  --username your-email@example.com \
-  --temporary-password TempPass123! \
-  --message-action SUPPRESS
-
-aws cognito-idp admin-set-user-password \
-  --user-pool-id [YOUR_USER_POOL_ID] \
-  --username your-email@example.com \
-  --password YourPassword123! \
-  --permanent
+cp .env.template .env
 ```
 
-### 4. Access Your Applications
-After deployment, you'll receive URLs for:
-- **📁 File Manager**: `https://your-distribution.cloudfront.net`
-- **🎤 Audio Recorder**: `https://your-distribution.cloudfront.net/audio.html`
+Key configurations:
+```env
+# AWS Configuration
+AWS_REGION=us-east-1
+S3_BUCKET_NAME=your-audio-bucket
 
-## 🏗️ Architecture Overview
+# API Endpoints
+API_ENDPOINT=https://your-api.execute-api.region.amazonaws.com/prod
+WS_ENDPOINT=wss://your-ws-api.execute-api.region.amazonaws.com/prod
 
-### Core Components
-- **Frontend**: React-based SPA with in-browser Babel compilation
-- **Authentication**: AWS Cognito User Pools + Identity Pools
-- **API**: AWS Lambda functions via API Gateway
-- **Storage**: S3 with user-scoped prefixes (`users/{userId}/`)
-- **CDN**: CloudFront for global content delivery
-- **Audio Storage**: Organized as `users/{userId}/audio/sessions/{date-sessionId}/`
+# Transcription
+WHISPER_API_KEY=your-openai-api-key
+TRANSCRIPTION_MODEL=whisper-1
 
-### Audio Recording Flow
-1. User authenticates via Cognito
-2. MediaRecorder captures audio in configurable chunks
-3. Each chunk gets pre-signed S3 URL from Lambda
-4. Chunks upload directly to S3 with session metadata
-5. Real-time UI updates show upload progress and playback
-
-## 🎯 Use Cases
-
-### Personal Use
-- **Voice Memos**: Record thoughts, ideas, meeting notes
-- **Audio Journaling**: Daily audio logs with organized storage
-- **File Backup**: Secure personal cloud storage alternative
-
-### Professional Use  
-- **Interview Recording**: Journalist interviews with chunked backup
-- **Training Material**: Educational content with reliable upload
-- **Team Collaboration**: Shared audio notes and file storage
-
-### Technical Use
-- **Claude Memory Extension**: Audio storage for AI consciousness research
-- **Transcription Pipeline**: Whisper-ready audio format and organization
-- **Data Collection**: Structured audio data with metadata
-
-## 🔧 Development
-
-### Numbered Step System
-The deployment uses a numbered step system for reliability:
-- **step-10**: Initial setup and configuration
-- **step-20**: Infrastructure deployment
-- **step-25**: Web file deployment with environment substitution
-- **step-45**: Audio-specific setup and validation
-- **step-47**: Comprehensive API testing
-
-### Template System
-- **DO NOT** edit `web/app.js` or `web/audio.html` directly
-- **ALWAYS** edit `.template` files in `web/` directory
-- Run `./step-25-update-web-files.sh` to apply template changes
-
-### Key Files
-```
-├── api/
-│   ├── audio.js              # Audio recording Lambda functions
-│   ├── s3.js                 # File management operations
-│   └── data.js               # Basic API endpoints
-├── web/
-│   ├── index.html            # Dashboard and file manager
-│   ├── audio.html.template   # Audio recorder interface  
-│   ├── app.js.template       # Main application logic
-│   └── audio-ui-styles.css   # Audio-specific styling
-├── step-*.sh                 # Numbered deployment scripts
-├── CLAUDE.md                 # Development guide for Claude
-└── .env                      # Environment configuration
+# Feature Flags
+ENABLE_REALTIME_ANALYSIS=true
+ENABLE_SPEAKER_DIARIZATION=false
 ```
 
-## 📱 Mobile Optimizations
+## 📊 Storage Structure
 
-### Audio Recording Mobile Features
-- **Collapsible Panels**: Test panels hide for mobile recording
-- **Touch Targets**: 36px+ buttons optimized for finger interaction
-- **Compact Layout**: Vertical optimization for more visible recordings
-- **Native Feel**: iOS action sheets for dropdown menus
-- **Scroll Prevention**: Fixed scroll jumping during audio playback
+Time-indexed organization for instant access:
+```
+s3://your-bucket/
+└── users/{userId}/audio/sessions/{sessionId}/
+    ├── manifest.json                 # Session metadata
+    ├── chunks/
+    │   ├── 00000-00005.webm         # 0-5 seconds
+    │   ├── 00005-00010.webm         # 5-10 seconds
+    │   └── ...
+    ├── transcripts/
+    │   ├── 00000-00005.json         # Matching transcripts
+    │   └── rolling.json             # Complete transcript
+    └── analysis/
+        ├── timeline.json            # Topic progression
+        ├── decisions.json           # Detected decisions
+        └── summaries/               # Periodic summaries
+```
 
-### Responsive Design
-- **Dashboard Cards**: Clean app selection with feature highlights
-- **Adaptive Grid**: Single column on mobile, two columns on desktop
-- **Breadcrumb Navigation**: Smart truncation and mobile-friendly sizing
+## 🛠️ Development
 
-## 🔐 Security Features
-
-### Audio-Specific Security
-- **User Isolation**: Audio files stored under `users/{userId}/audio/`
-- **Session Management**: Secure session IDs with timestamp prefixing
-- **Pre-signed URLs**: Time-limited (5min) upload/download access
-- **Chunk Validation**: Server-side verification of audio uploads
-
-### General Security
-- **JWT Authentication**: All API calls require valid Cognito tokens
-- **Input Sanitization**: File names and paths are sanitized
-- **CORS Protection**: Proper CORS headers for web security
-- **HTTPS Everywhere**: All traffic encrypted via CloudFront
-
-## 🧹 Cleanup
-
-To remove all AWS resources and avoid charges:
+### Local Development
 ```bash
-./step-99-cleanup.sh
+# Install dependencies
+npm install
+
+# Start local backend
+npm run start:backend
+
+# Start frontend with hot reload
+npm run start:frontend
+
+# Run tests
+npm test
 ```
 
-This will safely delete:
-- CloudFormation stack and all resources
-- S3 buckets (after emptying)
-- CloudFront distribution
-- Cognito User and Identity Pools
-- Lambda functions and log groups
-- Serverless deployment artifacts
+### Adding New Features
+1. Create Lambda function in `api/` directory
+2. Update `serverless.yml` with new function
+3. Add frontend components in `web/src/`
+4. Update WebSocket handlers for real-time features
 
-## 📊 Estimated Costs
+## 📈 Monitoring & Debugging
 
-For typical personal use:
-- **S3 Storage**: ~$0.023/GB (audio files)
-- **Lambda**: First 1M requests free
-- **API Gateway**: First 1M requests free  
-- **CloudFront**: First 1TB transfer free
-- **Cognito**: First 50,000 MAUs free
+### CloudWatch Dashboard
+Monitor key metrics:
+- Recording success rate
+- Transcription latency
+- Processing queue depth
+- WebSocket connections
 
-Expected monthly cost: **$1-5** for personal use
+### Debugging Tools
+```bash
+# View Lambda logs
+./scripts/debug-logs.sh <function-name>
 
-## 🐛 Troubleshooting
+# Test WebSocket connection
+./scripts/test-websocket.sh
 
-### Common Audio Issues
-1. **Microphone Access Denied**: Check browser permissions
-2. **Upload Failures**: Verify network connection and retry logic
-3. **Missing Icons**: Clear CloudFront cache, check CSS loading
+# Check processing status
+./scripts/check-session.sh <session-id>
+```
 
-### General Issues
-1. **Authentication Failures**: Verify Cognito configuration in templates
-2. **API Errors**: Check CloudWatch logs for Lambda functions
-3. **Template Issues**: Ensure environment variables in `.env` are correct
+## 🔐 Security
 
-### Debug Tools
-- **Browser Console**: Check for JavaScript errors
-- **CloudWatch Logs**: Monitor Lambda execution
-- **Audio Debug Panel**: Built-in logging and export functionality
+- **Authentication**: AWS Cognito with JWT tokens
+- **Authorization**: User-scoped S3 paths and DynamoDB records
+- **Encryption**: At-rest (S3/DynamoDB) and in-transit (TLS)
+- **Access Control**: Pre-signed URLs for uploads, no public S3 access
+
+## 💰 Cost Optimization
+
+Typical costs for moderate usage (1000 hours/month):
+- **Lambda**: ~$5-10 (processing)
+- **S3**: ~$25 (storage + requests)
+- **Transcription**: ~$50 (Whisper API)
+- **Data Transfer**: ~$10
+- **Total**: ~$90-100/month
+
+Cost-saving features:
+- Automatic archival of old recordings
+- Configurable quality settings
+- Batch processing for non-real-time analysis
+- S3 lifecycle policies
+
+## 🗺️ Roadmap
+
+### Phase 1: Core Platform ✅
+- [x] Audio recording and chunked upload
+- [x] User authentication
+- [x] Basic storage structure
+
+### Phase 2: Transcription (In Progress)
+- [ ] Whisper integration
+- [ ] Real-time transcription display
+- [ ] Transcript search
+
+### Phase 3: Intelligence Features
+- [ ] Topic extraction
+- [ ] Decision detection
+- [ ] Entity recognition
+- [ ] Meeting summaries
+
+### Phase 4: Advanced Search
+- [ ] Vector embeddings
+- [ ] Semantic search
+- [ ] Context-aware playback
+
+### Phase 5: Enterprise Features
+- [ ] Team collaboration
+- [ ] Custom vocabularies
+- [ ] API for third-party integrations
+- [ ] Advanced analytics
 
 ## 🤝 Contributing
 
+We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+### Development Setup
 1. Fork the repository
-2. Create a feature branch  
-3. Edit `.template` files (not generated files)
-4. Test on both desktop and mobile
-5. Submit a pull request
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit changes (`git commit -m 'Add amazing feature'`)
+4. Push to branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
 ## 📄 License
 
-MIT License - see [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License - see [LICENSE](LICENSE) file for details.
 
-## 🙏 Built With
+## 🙏 Acknowledgments
 
-- **AWS Services**: Lambda, S3, Cognito, CloudFront, API Gateway
-- **Frontend**: React 18, Babel (in-browser), MediaRecorder API
-- **Infrastructure**: Serverless Framework, CloudFormation
-- **Audio**: WebM/Opus encoding for Whisper compatibility
+- Built with AWS Serverless technologies
+- Transcription powered by OpenAI Whisper
+- UI components from Tailwind CSS
+- Real-time features via AWS API Gateway WebSocket
 
-## 📚 Additional Documentation
+## 📞 Support
 
-- **[CLAUDE.md](CLAUDE.md)**: Comprehensive development guide
-- **[AUDIO-RECORDING-SETUP.md](AUDIO-RECORDING-SETUP.md)**: Audio system documentation
-- **AWS Documentation**: [Serverless](https://serverless.com/), [Cognito](https://docs.aws.amazon.com/cognito/), [S3](https://docs.aws.amazon.com/s3/)
+- **Documentation**: [Full docs](https://docs.your-domain.com)
+- **Issues**: [GitHub Issues](https://github.com/yourusername/audio-intelligence-platform/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/yourusername/audio-intelligence-platform/discussions)
 
 ---
 
-**🎤 Ready to start recording?** Follow the Quick Start guide and you'll have a full-featured audio recording platform running in minutes!
+**Ready to build intelligent audio applications?** Follow the Quick Start guide above and have your platform running in minutes!

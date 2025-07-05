@@ -49,3 +49,5 @@ jspm_packages/
 *.dmg
 *.exe
 *.msi
+aws-sam-cli-macos-arm64.pkg
+*.pkg
