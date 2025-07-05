@@ -1700,6 +1700,11 @@
     <!-- Mobile dropdown backdrop -->
     <div class="mobile-dropdown-backdrop" id="mobile-dropdown-backdrop"></div>
 
+    <!-- Floating Action Button for Audio Recorder -->
+    <a href="audio.html" class="fab" id="audio-fab" style="display: none; position: fixed !important; bottom: 24px !important; right: 24px !important; left: auto !important; width: 64px !important; height: 64px !important; border-radius: 50% !important; background: white !important; color: #6b7280 !important; border: 2px solid #e5e7eb !important; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important; display: flex !important; align-items: center; justify-content: center; text-decoration: none; z-index: 1000;" title="Audio Recorder">
+        <i class="fas fa-microphone" style="font-size: 20px !important; color: #6b7280 !important;"></i>
+    </a>
+
     <script src="https://cdn.jsdelivr.net/npm/amazon-cognito-identity-js/dist/amazon-cognito-identity.min.js"></script>
     <script src="https://sdk.amazonaws.com/js/aws-sdk-2.1000.0.min.js"></script>
     <script src="app.js"></script>
@@ -1718,6 +1723,51 @@
                             listS3Files();
                         }
                     }, 500);
+                });
+            }
+
+            // FAB visibility management
+            const audioFab = document.getElementById('audio-fab');
+            
+            // Show FAB when user is authenticated and in file manager
+            function updateFabVisibility() {
+                const isAuthenticated = localStorage.getItem('id_token');
+                const isInFileManager = document.getElementById('authenticated-section').style.display !== 'none';
+                const isInDashboard = document.getElementById('dashboard-section').style.display !== 'none';
+                
+                // Show FAB when authenticated and in either file manager or dashboard
+                if (audioFab && isAuthenticated && (isInFileManager || isInDashboard)) {
+                    audioFab.style.display = 'flex';
+                    audioFab.style.position = 'fixed';
+                    audioFab.style.bottom = '24px';
+                    audioFab.style.right = '24px';
+                    audioFab.style.left = 'auto';
+                } else if (audioFab) {
+                    audioFab.style.display = 'none';
+                }
+            }
+            
+            // Make function globally available
+            window.updateFabVisibility = updateFabVisibility;
+            
+            // Call initially and set up observer for visibility changes
+            updateFabVisibility();
+            
+            // Watch for section changes
+            const observer = new MutationObserver(updateFabVisibility);
+            
+            // Observe both authenticated-section and dashboard-section
+            if (document.getElementById('authenticated-section')) {
+                observer.observe(document.getElementById('authenticated-section'), { 
+                    attributes: true, 
+                    attributeFilter: ['style'] 
+                });
+            }
+            
+            if (document.getElementById('dashboard-section')) {
+                observer.observe(document.getElementById('dashboard-section'), { 
+                    attributes: true, 
+                    attributeFilter: ['style'] 
                 });
             }
 

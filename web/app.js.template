@@ -62,6 +62,13 @@ function checkAuthentication() {
             dashboardSection.style.display = 'block';
             userInfo.style.display = 'flex';
             
+            // Update FAB visibility after authentication
+            setTimeout(() => {
+                if (typeof updateFabVisibility === 'function') {
+                    updateFabVisibility();
+                }
+            }, 100);
+            
         } catch (error) {
             console.error('Error parsing token:', error);
             showLoginSection();
@@ -87,10 +94,62 @@ function showLoginSection() {
 }
 
 
+// Navigation functions
+function showDashboard() {
+    const loginSection = document.getElementById('login-section');
+    const dashboardSection = document.getElementById('dashboard-section');
+    const authenticatedSection = document.getElementById('authenticated-section');
+    const memorySection = document.getElementById('memory-section');
+    
+    loginSection.style.display = 'none';
+    dashboardSection.style.display = 'block';
+    authenticatedSection.style.display = 'none';
+    memorySection.style.display = 'none';
+}
+
+function showFileManager() {
+    const loginSection = document.getElementById('login-section');
+    const dashboardSection = document.getElementById('dashboard-section');
+    const authenticatedSection = document.getElementById('authenticated-section');
+    const memorySection = document.getElementById('memory-section');
+    
+    loginSection.style.display = 'none';
+    dashboardSection.style.display = 'none';
+    authenticatedSection.style.display = 'block';
+    memorySection.style.display = 'none';
+    
+    // Load files when entering file manager
+    if (typeof listS3Files === 'function') {
+        listS3Files();
+    }
+    
+    // Update FAB visibility after section changes
+    setTimeout(() => {
+        if (typeof updateFabVisibility === 'function') {
+            updateFabVisibility();
+        }
+    }, 100);
+}
+
+// Make functions globally available
+window.showDashboard = showDashboard;
+window.showFileManager = showFileManager;
+
 // Initialize when page loads
 document.addEventListener('DOMContentLoaded', function() {
     console.log("DOM loaded, checking authentication");
     checkAuthentication();
+    
+    // Check for navigation parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    const goto = urlParams.get('goto');
+    
+    if (goto === 'files' && localStorage.getItem('id_token')) {
+        // Go directly to file manager if requested and authenticated
+        setTimeout(() => {
+            showFileManager();
+        }, 100);
+    }
     
     // Set up event listeners
     if (loginButton) loginButton.addEventListener('click', login);
@@ -274,6 +333,7 @@ function getFileIcon(fileName, isFolder = false) {
         // Audio/Video
         'mp3': { icon: 'fas fa-file-audio', color: '#9c27b0' },
         'wav': { icon: 'fas fa-file-audio', color: '#9c27b0' },
+        'webm': { icon: 'fas fa-play-circle', color: '#667eea' },
         'mp4': { icon: 'fas fa-file-video', color: '#ff5722' },
         'avi': { icon: 'fas fa-file-video', color: '#ff5722' },
         'mov': { icon: 'fas fa-file-video', color: '#ff5722' },
@@ -443,11 +503,17 @@ async function listS3Files() {
             // Extract folders and files for current directory
             const items = extractFolders(data.files);
             
+            // Check if we're in the sessions directory
+            const isInSessionsDir = currentPath.includes('sessions/') || currentPath.endsWith('sessions/');
+            
+            // Sort items (sessions first if in sessions dir, newest first)
+            const sortedItems = sortItems(items, isInSessionsDir);
+            
             // Create file list
             const fileList = document.createElement('div');
             fileList.className = 'file-list';
             
-            items.forEach((item, index) => {
+            sortedItems.forEach((item, index) => {
                 const fullKey = item.key || item;
                 // Calculate clean relative name - remove current path prefix and show just the filename/foldername
                 let displayName = item.displayKey || item.key || item;
@@ -457,6 +523,9 @@ async function listS3Files() {
                 // Remove any leading/trailing slashes for clean display
                 displayName = displayName.replace(/^\/+|\/+$/g, '');
                 const isFolder = item.isFolder || false;
+                
+                // Format session names if we're in the sessions directory
+                const formattedDisplayName = formatSessionName(displayName, isInSessionsDir);
                 const fileSize = isFolder ? '' : formatFileSize(item.size);
                 const fileDate = new Date(item.lastModified).toLocaleDateString();
                 const fileTypeInfo = getFileIcon(displayName, isFolder);
@@ -468,7 +537,7 @@ async function listS3Files() {
                         <i class="${fileTypeInfo.icon}" style="color: ${fileTypeInfo.color};"></i>
                     </div>
                     <div class="file-list-info">
-                        <div class="file-list-name" title="${displayName}">${displayName}</div>
+                        <div class="file-list-name" title="${formattedDisplayName}">${formattedDisplayName}</div>
                         <div class="file-list-meta">
                             ${isFolder ? 
                                 '<span><i class="fas fa-folder-open"></i> Folder</span>' : 
@@ -500,7 +569,14 @@ async function listS3Files() {
                                     <i class="fas fa-trash"></i>
                                     <span>Delete</span>
                                 </button>` :
-                                `<button class="dropdown-item download-btn" data-key="${fullKey}" data-name="${displayName}">
+                                `${displayName.split('.').pop().toLowerCase() === 'webm' ? 
+                                    `<button class="dropdown-item play-btn" data-key="${fullKey}" data-name="${displayName}">
+                                        <i class="fas fa-play"></i>
+                                        <span>Play Audio</span>
+                                    </button>
+                                    <div class="dropdown-divider"></div>` : ''
+                                }
+                                <button class="dropdown-item download-btn" data-key="${fullKey}" data-name="${displayName}">
                                     <i class="fas fa-download"></i>
                                     <span>Download</span>
                                 </button>
@@ -584,6 +660,7 @@ async function listS3Files() {
                 const moveBtn = fileItem.querySelector('.move-btn');
                 const downloadBtn = fileItem.querySelector('.download-btn');
                 const openBtn = fileItem.querySelector('.open-btn');
+                const playBtn = fileItem.querySelector('.play-btn');
                 
                 deleteBtn?.addEventListener('click', (e) => {
                     e.stopPropagation();
@@ -615,6 +692,12 @@ async function listS3Files() {
                     navigateToFolder(fullKey);
                 });
                 
+                playBtn?.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    dropdownMenu.classList.remove('show');
+                    playAudioFile(fullKey, displayName, index);
+                });
+                
                 // Add click handler for row click (mobile/desktop friendly)
                 fileItem.addEventListener('click', (e) => {
                     // Don't trigger if clicking on menu button or dropdown
@@ -623,8 +706,14 @@ async function listS3Files() {
                     if (isFolder) {
                         navigateToFolder(fullKey);
                     } else {
-                        // For files, show a preview or download on click
-                        downloadFile(fullKey, displayName, index);
+                        // Check if this is a .webm file for audio playback
+                        const extension = displayName.split('.').pop().toLowerCase();
+                        if (extension === 'webm') {
+                            playAudioFile(fullKey, displayName, index);
+                        } else {
+                            // For other files, show a preview or download on click
+                            downloadFile(fullKey, displayName, index);
+                        }
                     }
                 });
                 
@@ -723,6 +812,90 @@ function formatFileSize(bytes) {
     const sizes = ['Bytes', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+// Format session folder names for better readability
+function formatSessionName(name, isInSessionsDir) {
+    if (!isInSessionsDir) return name;
+    
+    // Check if this looks like a session folder - handle both old and new formats
+    
+    // New format: 202507JUL04-222805 (YYYYMMMON DD-HHMMSS)
+    const newSessionMatch = name.match(/^(\d{4})(\d{2})([A-Z]{3})(\d{2})-(\d{2})(\d{2})(\d{2})$/);
+    if (newSessionMatch) {
+        const [, year, month, monthName, day, hours, minutes, seconds] = newSessionMatch;
+        return `${year}.${month}${monthName}.${day}-${hours}:${minutes}:${seconds}`;
+    }
+    
+    // Old format: session-timestamp-id (fallback)
+    const oldSessionMatch = name.match(/^session-(\d+)-[a-z0-9]+$/);
+    if (oldSessionMatch) {
+        const timestamp = parseInt(oldSessionMatch[1]);
+        const date = new Date(timestamp);
+        
+        // Format as 2025.07JUL.04-22:28:05
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const monthName = date.toLocaleDateString('en-US', { month: 'short' }).toUpperCase();
+        const day = String(date.getDate()).padStart(2, '0');
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        const seconds = String(date.getSeconds()).padStart(2, '0');
+        
+        return `${year}.${month}${monthName}.${day}-${hours}:${minutes}:${seconds}`;
+    }
+    
+    // Return original name if no pattern matches
+    return name;
+}
+
+// Sort items with sessions on top (newest first), then other folders, then files
+function sortItems(items, isInSessionsDir) {
+    return items.sort((a, b) => {
+        const aIsFolder = a.isFolder || false;
+        const bIsFolder = b.isFolder || false;
+        
+        // Both are folders
+        if (aIsFolder && bIsFolder) {
+            if (isInSessionsDir) {
+                // In sessions directory, sort session folders by timestamp (newest first)
+                const aKey = a.displayKey || a.key || '';
+                const bKey = b.displayKey || b.key || '';
+                
+                // Check for new format: 202507JUL04-222805
+                const aNewSessionMatch = aKey.match(/^(\d{4})(\d{2})([A-Z]{3})(\d{2})-(\d{2})(\d{2})(\d{2})$/);
+                const bNewSessionMatch = bKey.match(/^(\d{4})(\d{2})([A-Z]{3})(\d{2})-(\d{2})(\d{2})(\d{2})$/);
+                
+                if (aNewSessionMatch && bNewSessionMatch) {
+                    // Both are new format - sort by the raw string (newest first)
+                    return bKey.localeCompare(aKey);
+                }
+                
+                // Check for old format: session-timestamp-id
+                const aOldSessionMatch = aKey.match(/^session-(\d+)-[a-z0-9]+$/);
+                const bOldSessionMatch = bKey.match(/^session-(\d+)-[a-z0-9]+$/);
+                
+                if (aOldSessionMatch && bOldSessionMatch) {
+                    return parseInt(bOldSessionMatch[1]) - parseInt(aOldSessionMatch[1]); // Newest first
+                }
+                
+                // Mixed formats - prioritize new format sessions
+                if (aNewSessionMatch && !bNewSessionMatch) return -1; // New format first
+                if (!aNewSessionMatch && bNewSessionMatch) return 1;
+                if (aOldSessionMatch && !bOldSessionMatch) return -1; // Old format sessions first
+                if (!aOldSessionMatch && bOldSessionMatch) return 1;
+            }
+            // Regular alphabetical sort for non-session folders
+            return (a.displayKey || a.key || '').localeCompare(b.displayKey || b.key || '');
+        }
+        
+        // Folders before files
+        if (aIsFolder && !bIsFolder) return -1;
+        if (!aIsFolder && bIsFolder) return 1;
+        
+        // Both are files - sort alphabetically
+        return (a.displayKey || a.key || '').localeCompare(b.displayKey || b.key || '');
+    });
 }
 
 
@@ -1920,7 +2093,13 @@ function showMobileActionSheet(fileKey, fileName, isFolder, index) {
                         <i class="fas fa-trash"></i>
                         <span>Delete</span>
                     </button>` :
-                    `<button class="mobile-action-btn" data-action="download">
+                    `${fileName.split('.').pop().toLowerCase() === 'webm' ? 
+                        `<button class="mobile-action-btn" data-action="play">
+                            <i class="fas fa-play"></i>
+                            <span>Play Audio</span>
+                        </button>` : ''
+                    }
+                    <button class="mobile-action-btn" data-action="download">
                         <i class="fas fa-download"></i>
                         <span>Download</span>
                     </button>
@@ -2066,6 +2245,9 @@ function showMobileActionSheet(fileKey, fileName, isFolder, index) {
                     case 'open':
                         navigateToFolder(fileKey);
                         break;
+                    case 'play':
+                        playAudioFile(fileKey, fileName, index);
+                        break;
                     case 'download':
                         downloadFile(fileKey, fileName, index);
                         break;
@@ -2118,6 +2300,317 @@ function showFileManager() {
             listS3Files();
         }
     }, 100);
+}
+
+// Audio playback functionality for .webm files
+let currentAudio = null;
+let currentAudioModal = null;
+
+async function playAudioFile(fileKey, fileName, index) {
+    const idToken = localStorage.getItem('id_token');
+    
+    if (!idToken) {
+        alert('You must be logged in to play audio files.');
+        return;
+    }
+    
+    try {
+        console.log(`Getting audio URL for: ${fileKey}`);
+        
+        const encodedKey = encodeURIComponent(fileKey);
+        const response = await fetch(`${config.appUrl}/api/s3/download/${encodedKey}`, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${idToken}`,
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            }
+        });
+        
+        if (!response.ok) {
+            throw new Error(`Failed to get audio URL: ${response.status}`);
+        }
+        
+        const downloadData = await response.json();
+        
+        // Stop any currently playing audio
+        if (currentAudio) {
+            currentAudio.pause();
+            currentAudio = null;
+        }
+        
+        // Close any existing audio modal
+        if (currentAudioModal) {
+            document.body.removeChild(currentAudioModal);
+            currentAudioModal = null;
+        }
+        
+        // Create audio player modal
+        const modal = document.createElement('div');
+        modal.className = 'audio-player-modal';
+        modal.innerHTML = `
+            <div class="audio-player-content">
+                <div class="audio-player-header">
+                    <h3>${fileName}</h3>
+                    <button class="close-audio-player" id="close-audio-player">&times;</button>
+                </div>
+                <div class="audio-player-body">
+                    <div class="audio-controls">
+                        <button class="audio-btn" id="play-pause-btn">
+                            <i class="fas fa-play"></i>
+                        </button>
+                        <div class="audio-progress-container">
+                            <div class="audio-progress-bar">
+                                <div class="audio-progress-fill" id="progress-fill"></div>
+                                <div class="audio-progress-handle" id="progress-handle"></div>
+                            </div>
+                            <div class="audio-time">
+                                <span id="current-time">0:00</span>
+                                <span id="total-time">0:00</span>
+                            </div>
+                        </div>
+                        <button class="audio-btn" id="volume-btn">
+                            <i class="fas fa-volume-up"></i>
+                        </button>
+                    </div>
+                    <audio id="audio-element" preload="metadata">
+                        <source src="${downloadData.downloadUrl}" type="audio/webm">
+                        Your browser does not support the audio element.
+                    </audio>
+                </div>
+            </div>
+        `;
+        
+        // Add CSS styles
+        modal.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        `;
+        
+        const content = modal.querySelector('.audio-player-content');
+        content.style.cssText = `
+            background: white;
+            border-radius: 12px;
+            padding: 0;
+            width: 90%;
+            max-width: 500px;
+            max-height: 90vh;
+            overflow: hidden;
+            transform: scale(0.9);
+            transition: transform 0.3s ease;
+        `;
+        
+        const header = modal.querySelector('.audio-player-header');
+        header.style.cssText = `
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid #e5e7eb;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        `;
+        
+        const closeBtn = modal.querySelector('.close-audio-player');
+        closeBtn.style.cssText = `
+            background: none;
+            border: none;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            padding: 4px;
+        `;
+        
+        const body = modal.querySelector('.audio-player-body');
+        body.style.cssText = `
+            padding: 2rem 1.5rem;
+        `;
+        
+        const controls = modal.querySelector('.audio-controls');
+        controls.style.cssText = `
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        `;
+        
+        const audioButtons = modal.querySelectorAll('.audio-btn');
+        audioButtons.forEach(btn => {
+            btn.style.cssText = `
+                width: 48px;
+                height: 48px;
+                border-radius: 50%;
+                border: none;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                cursor: pointer;
+                transition: transform 0.2s;
+            `;
+        });
+        
+        const progressContainer = modal.querySelector('.audio-progress-container');
+        progressContainer.style.cssText = `
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        `;
+        
+        const progressBar = modal.querySelector('.audio-progress-bar');
+        progressBar.style.cssText = `
+            height: 8px;
+            background: #e5e7eb;
+            border-radius: 4px;
+            position: relative;
+            cursor: pointer;
+        `;
+        
+        const progressFill = modal.querySelector('.audio-progress-fill');
+        progressFill.style.cssText = `
+            height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 4px;
+            width: 0%;
+            transition: width 0.1s;
+        `;
+        
+        const timeDisplay = modal.querySelector('.audio-time');
+        timeDisplay.style.cssText = `
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.875rem;
+            color: #6b7280;
+        `;
+        
+        document.body.appendChild(modal);
+        currentAudioModal = modal;
+        
+        // Show modal with animation
+        setTimeout(() => {
+            modal.style.opacity = '1';
+            content.style.transform = 'scale(1)';
+        }, 10);
+        
+        // Get audio element and set up controls
+        const audio = modal.querySelector('#audio-element');
+        const playPauseBtn = modal.querySelector('#play-pause-btn');
+        const volumeBtn = modal.querySelector('#volume-btn');
+        const currentTimeSpan = modal.querySelector('#current-time');
+        const totalTimeSpan = modal.querySelector('#total-time');
+        
+        currentAudio = audio;
+        
+        // Set initial time display
+        totalTimeSpan.textContent = formatTime(audio.duration);
+        
+        // Audio event listeners
+        audio.addEventListener('loadedmetadata', () => {
+            totalTimeSpan.textContent = formatTime(audio.duration);
+        });
+        
+        audio.addEventListener('timeupdate', () => {
+            const progress = (audio.currentTime / audio.duration) * 100;
+            progressFill.style.width = progress + '%';
+            currentTimeSpan.textContent = formatTime(audio.currentTime);
+        });
+        
+        audio.addEventListener('ended', () => {
+            playPauseBtn.innerHTML = '<i class="fas fa-play"></i>';
+            progressFill.style.width = '0%';
+            currentTimeSpan.textContent = '0:00';
+        });
+        
+        // Control event listeners
+        playPauseBtn.addEventListener('click', () => {
+            if (audio.paused) {
+                audio.play();
+                playPauseBtn.innerHTML = '<i class="fas fa-pause"></i>';
+            } else {
+                audio.pause();
+                playPauseBtn.innerHTML = '<i class="fas fa-play"></i>';
+            }
+        });
+        
+        volumeBtn.addEventListener('click', () => {
+            audio.muted = !audio.muted;
+            volumeBtn.innerHTML = audio.muted ? 
+                '<i class="fas fa-volume-mute"></i>' : 
+                '<i class="fas fa-volume-up"></i>';
+        });
+        
+        // Progress bar click to seek
+        progressBar.addEventListener('click', (e) => {
+            const rect = progressBar.getBoundingClientRect();
+            const clickX = e.clientX - rect.left;
+            const seekPercent = clickX / rect.width;
+            audio.currentTime = seekPercent * audio.duration;
+        });
+        
+        // Close modal function
+        const closeModal = () => {
+            if (currentAudio) {
+                currentAudio.pause();
+                currentAudio = null;
+            }
+            
+            modal.style.opacity = '0';
+            content.style.transform = 'scale(0.9)';
+            
+            setTimeout(() => {
+                if (document.body.contains(modal)) {
+                    document.body.removeChild(modal);
+                }
+                currentAudioModal = null;
+            }, 300);
+        };
+        
+        // Close button and backdrop click
+        closeBtn.addEventListener('click', closeModal);
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                closeModal();
+            }
+        });
+        
+        // Keyboard controls
+        document.addEventListener('keydown', function handleKeydown(e) {
+            if (currentAudioModal === modal) {
+                if (e.code === 'Space') {
+                    e.preventDefault();
+                    playPauseBtn.click();
+                } else if (e.code === 'Escape') {
+                    closeModal();
+                    document.removeEventListener('keydown', handleKeydown);
+                }
+            }
+        });
+        
+        console.log('Audio player opened successfully');
+        
+    } catch (error) {
+        console.error('Error playing audio file:', error);
+        alert(`Failed to play audio: ${error.message}`);
+    }
+}
+
+// Helper function to format time
+function formatTime(seconds) {
+    if (isNaN(seconds) || seconds === Infinity || seconds < 0) return '0:00';
+    const minutes = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${minutes}:${secs.toString().padStart(2, '0')}`;
 }
 
 

@@ -344,6 +344,8 @@ module.exports.deleteObject = async (event) => {
     const userId = claims.sub || 'unknown';
     
     console.log(`User ${email} (${userId}) requesting file deletion`);
+    console.log('Event pathParameters:', JSON.stringify(event.pathParameters));
+    console.log('Event body:', event.body);
 
     // Get bucket name from environment variable
     const bucketName = process.env.S3_BUCKET_NAME;
@@ -358,7 +360,10 @@ module.exports.deleteObject = async (event) => {
       fileKey = body.fileKey;
     }
     
+    console.log('Extracted fileKey:', fileKey);
+    
     if (!fileKey) {
+      console.log('No file key found, returning 400 error');
       return {
         statusCode: 400,
         headers: {
@@ -370,32 +375,114 @@ module.exports.deleteObject = async (event) => {
     }
 
     // Decode the file key (in case it was URL encoded)
-    const decodedKey = decodeURIComponent(fileKey);
+    let decodedKey = decodeURIComponent(fileKey);
+    console.log('Decoded key:', decodedKey);
     
-    // Security check: only allow deletion of user's own files
+    // Handle both full keys and relative keys
     const userPrefix = `users/${userId}/`;
+    console.log('Expected user prefix:', userPrefix);
+    
     if (!decodedKey.startsWith(userPrefix)) {
+      // If the key doesn't start with user prefix, try to add it
+      if (!decodedKey.startsWith('users/')) {
+        console.log('Key is relative, adding user prefix');
+        decodedKey = userPrefix + decodedKey;
+      } else {
+        // Key starts with 'users/' but not our user's prefix - access denied
+        console.log('Security check failed - key belongs to different user');
+        return {
+          statusCode: 403,
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Credentials': true,
+          },
+          body: JSON.stringify({ 
+            error: 'Access denied: You can only delete your own files' 
+          }),
+        };
+      }
+    }
+    
+    console.log('Final key to delete:', decodedKey);
+
+    console.log(`Deleting S3 object: ${decodedKey}`);
+
+    // Check if this is a folder (ends with /) or a session folder
+    const isFolder = decodedKey.endsWith('/');
+    const isSessionFolder = decodedKey.includes('/audio/sessions/') && !decodedKey.includes('/chunks/');
+    
+    if (isFolder || isSessionFolder) {
+      // Delete all objects in the folder
+      console.log(`Deleting folder and all contents: ${decodedKey}`);
+      
+      // Ensure folder key ends with / (but don't double it)
+      const folderKey = decodedKey.endsWith('/') ? decodedKey : `${decodedKey}/`;
+      console.log('Using folderKey for listing:', folderKey);
+      
+      // List all objects in the folder
+      const listParams = {
+        Bucket: bucketName,
+        Prefix: folderKey
+      };
+      
+      const listedObjects = await s3.listObjectsV2(listParams).promise();
+      
+      if (listedObjects.Contents.length === 0) {
+        console.log(`No objects found in folder: ${folderKey}`);
+        return {
+          statusCode: 200,
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Credentials': true,
+          },
+          body: JSON.stringify({
+            message: 'Folder was already empty',
+            user: email,
+            userId: userId,
+            deletedFolder: decodedKey,
+            deletedCount: 0,
+            timestamp: new Date().toISOString()
+          }),
+        };
+      }
+      
+      // Delete all objects in batches
+      const deleteParams = {
+        Bucket: bucketName,
+        Delete: {
+          Objects: listedObjects.Contents.map(({ Key }) => ({ Key }))
+        }
+      };
+      
+      const deleteResult = await s3.deleteObjects(deleteParams).promise();
+      console.log(`Successfully deleted ${deleteResult.Deleted.length} objects from folder: ${folderKey}`);
+      
       return {
-        statusCode: 403,
+        statusCode: 200,
         headers: {
           'Access-Control-Allow-Origin': '*',
           'Access-Control-Allow-Credentials': true,
         },
-        body: JSON.stringify({ 
-          error: 'Access denied: You can only delete your own files' 
+        body: JSON.stringify({
+          message: 'Folder and all contents deleted successfully',
+          user: email,
+          userId: userId,
+          deletedFolder: decodedKey,
+          deletedCount: deleteResult.Deleted.length,
+          deletedFiles: deleteResult.Deleted.map(d => d.Key),
+          timestamp: new Date().toISOString()
         }),
       };
+      
+    } else {
+      // Delete single file
+      await s3.deleteObject({
+        Bucket: bucketName,
+        Key: decodedKey
+      }).promise();
+
+      console.log(`Successfully deleted file: ${decodedKey}`);
     }
-
-    console.log(`Deleting S3 object: ${decodedKey}`);
-
-    // Delete the object from S3
-    await s3.deleteObject({
-      Bucket: bucketName,
-      Key: decodedKey
-    }).promise();
-
-    console.log(`Successfully deleted: ${decodedKey}`);
 
     return {
       statusCode: 200,

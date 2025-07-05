@@ -7,8 +7,22 @@
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link rel="stylesheet" href="audio-ui-styles.css">
     <link rel="stylesheet" href="styles.css">
+    <style>
+        @keyframes pulse {
+            0% {
+                box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.7);
+            }
+            70% {
+                box-shadow: 0 0 0 10px rgba(220, 53, 69, 0);
+            }
+            100% {
+                box-shadow: 0 0 0 0 rgba(220, 53, 69, 0);
+            }
+        }
+    </style>
 </head>
 <body>
     <div id="root"></div>
@@ -33,13 +47,13 @@
 
         // Configuration - to be updated after deployment
         const config = {
-            userPoolId: 'us-east-2_bIOdafLYw',
-            userPoolClientId: '71mekvcvonmnqgcdgu7hug0m1a',
-            identityPoolId: 'us-east-2:2a9cf8e2-a7ae-40d2-9db8-3040feaacdf0',
+            userPoolId: 'us-east-2_kUXJTqSBx',
+            userPoolClientId: '3hkkor3jfohtvbu0g4lc7c96qq',
+            identityPoolId: 'us-east-2:77a92592-0d49-442e-a7a8-70eb6d8ece33',
             region: 'us-east-2',
-            apiUrl: '/api/data',
-            audioApiUrl: 'https://3p4wbfmc4d.execute-api.us-east-2.amazonaws.com/dev/api/audio',
-            appUrl: 'https://d5dj5c4j0qunh.cloudfront.net'
+            apiUrl: 'https://dvae4jz4fkq7l.cloudfront.net/api/data',
+            audioApiUrl: 'https://mbgdc7wlc9.execute-api.us-east-2.amazonaws.com/dev/api/audio',
+            appUrl: 'https://dvae4jz4fkq7l.cloudfront.net'
         };
 
         // Debug logging
@@ -244,11 +258,21 @@
                 }
             };
 
-            // Generate session ID
+            // Generate human-readable session ID
             const generateSessionId = () => {
-                const timestamp = Date.now();
-                const random = Math.random().toString(36).substring(2, 8);
-                return `session-${timestamp}-${random}`;
+                const now = new Date();
+                const year = now.getFullYear();
+                const month = String(now.getMonth() + 1).padStart(2, '0');
+                const monthNames = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 
+                                  'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+                const monthAbbr = monthNames[now.getMonth()];
+                const day = String(now.getDate()).padStart(2, '0');
+                const hour = String(now.getHours()).padStart(2, '0');
+                const minute = String(now.getMinutes()).padStart(2, '0');
+                const second = String(now.getSeconds()).padStart(2, '0');
+                
+                // Format: 2025.07(JUL).04-141530 (YYYY.MM(MON).DD-HHMMSS)
+                return `${year}.${month}(${monthAbbr}).${day}-${hour}${minute}${second}`;
             };
 
             // Upload chunk to S3
@@ -336,9 +360,39 @@
             }, [isRecording, chunkDuration]);
 
             const formatTime = (seconds) => {
+                if (isNaN(seconds) || seconds === Infinity || seconds < 0) return '00:00';
                 const mins = Math.floor(seconds / 60);
                 const secs = seconds % 60;
                 return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+            };
+
+            const formatSessionDisplay = (sessionId) => {
+                try {
+                    // Format: 2025.07(JUL).05-024630
+                    const [datePart, timePart] = sessionId.split('-');
+                    
+                    if (!datePart || !timePart) return sessionId;
+                    
+                    // Parse date: 2025.07(JUL).05
+                    const dateMatch = datePart.match(/(\d{4})\.(\d{2})\((\w{3})\)\.(\d{2})/);
+                    if (!dateMatch) return sessionId;
+                    
+                    const [, year, month, monthName, day] = dateMatch;
+                    
+                    // Parse time: 024630 (HHMMSS)
+                    const hour = timePart.substring(0, 2);
+                    const minute = timePart.substring(2, 4);
+                    const second = timePart.substring(4, 6);
+                    
+                    // Format as readable date and time
+                    const formattedDate = `${monthName} ${day}, ${year}`;
+                    const formattedTime = `${hour}:${minute}:${second}`;
+                    
+                    return `${formattedDate} at ${formattedTime}`;
+                } catch (error) {
+                    // Fallback to original sessionId if parsing fails
+                    return sessionId;
+                }
             };
 
             const createChunkFromCurrentRecording = async () => {
@@ -379,7 +433,8 @@
                         const audioUrl = URL.createObjectURL(audioBlob);
                         const newRecording = {
                             id: `${sessionIdRef.current}-chunk-${chunkNumber}`,
-                            name: `${sessionIdRef.current} (Chunk ${chunkNumber})`,
+                            name: `Chunk ${chunkNumber}`,
+                            sessionName: sessionIdRef.current,
                             duration: chunkDuration,
                             size: Number((audioBlob.size / (1024 * 1024)).toFixed(2)),
                             timestamp: new Date(),
@@ -586,10 +641,10 @@
 
             const getSyncStatusIcon = (syncStatus) => {
                 switch (syncStatus) {
-                    case 'synced': return <CheckIcon />;
-                    case 'uploading': return <CloudIcon />;
-                    case 'failed': return '❌';
-                    default: return '⏳';
+                    case 'synced': return <i className="fas fa-check"></i>;
+                    case 'uploading': return <i className="fas fa-cloud-upload-alt"></i>;
+                    case 'failed': return <i className="fas fa-exclamation-triangle"></i>;
+                    default: return <i className="fas fa-clock"></i>;
                 }
             };
 
@@ -618,144 +673,434 @@
             }
 
             return (
-                <div className={`min-h-screen ${themeClass}`}>
-                    {/* Status Bar */}
-                    <div className="flex items-center justify-between p-4" style={{backgroundColor: 'hsl(var(--muted))'}}>
-                        <div className="flex items-center gap-2">
-                            <span style={{color: '#22c55e'}}>●</span>
-                            <span style={{fontSize: '14px', color: '#22c55e'}}>Online</span>
-                            <span style={{fontSize: '14px', marginLeft: '16px'}}>
-                                {user.email}
-                            </span>
+                <div style={{minHeight: '100vh', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'}}>
+                    {/* Header - using inline styles for React compatibility */}
+                    <div style={{
+                        background: 'rgba(255, 255, 255, 0.95)',
+                        backdropFilter: 'blur(10px)',
+                        padding: '1rem 2rem',
+                        boxShadow: '0 2px 20px rgba(0, 0, 0, 0.1)',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        position: 'sticky',
+                        top: 0,
+                        zIndex: 100
+                    }}>
+                        <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            fontSize: '1.5rem',
+                            fontWeight: 'bold',
+                            color: '#667eea'
+                        }}>
+                            <i className="fas fa-microphone" style={{marginRight: '0.5rem', fontSize: '1.8rem'}}></i>
+                            Audio Recorder
                         </div>
-                        <div className="flex items-center gap-4">
-                            <div style={{fontSize: '14px'}}>
-                                {sessions.length} sessions
+                        <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '1rem'
+                        }}>
+                            <div style={{
+                                width: '40px',
+                                height: '40px',
+                                borderRadius: '50%',
+                                background: 'linear-gradient(45deg, #667eea, #764ba2)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                color: 'white',
+                                fontWeight: 'bold'
+                            }}>
+                                {user.email.split('@')[0].substring(0, 2).toUpperCase()}
                             </div>
-                            <a href="/" className="btn btn-outline" style={{fontSize: '12px', padding: '4px 8px'}}>
-                                ← Back to Files
+                            <span>{user.email}</span>
+                            <a href="/?goto=files" style={{
+                                background: '#6c757d',
+                                color: 'white',
+                                padding: '0.375rem 0.75rem',
+                                borderRadius: '0.25rem',
+                                textDecoration: 'none',
+                                fontSize: '0.875rem',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.5rem'
+                            }}>
+                                <i className="fas fa-folder"></i>
+                                Files
                             </a>
                         </div>
                     </div>
 
-                    <div className="container">
-                        <div className="grid grid-cols-2 gap-4 p-3">
-                            {/* Recording Controls - Compact */}
-                            <div className="card p-3">
-                                <div className="flex items-center gap-2 mb-3">
-                                    <MicIcon size={16} />
-                                    <h2 className="text-base font-bold">Audio Recorder</h2>
+                    <div style={{
+                        maxWidth: '1200px',
+                        margin: '2rem auto',
+                        padding: '0 2rem'
+                    }}>
+                        <div style={{
+                            background: 'white',
+                            borderRadius: '20px',
+                            boxShadow: '0 20px 40px rgba(0, 0, 0, 0.1)',
+                            overflow: 'hidden',
+                            minHeight: '600px'
+                        }}>
+                            <div style={{padding: '2rem'}}>
+                                <div style={{
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
+                                    marginBottom: '1rem'
+                                }}>
+                                    <h2 style={{
+                                        margin: 0,
+                                        fontSize: '1.5rem',
+                                        fontWeight: 'bold',
+                                        color: '#333',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '0.5rem'
+                                    }}>
+                                        <i className="fas fa-microphone" style={{color: '#667eea'}}></i>
+                                        Audio Recording Studio
+                                    </h2>
+                                    <span style={{fontSize: '14px', color: '#666'}}>
+                                        {sessions.length} sessions
+                                    </span>
                                 </div>
+                                <p style={{color: '#666', marginBottom: '2rem'}}>
+                                    Record high-quality audio with automatic chunking and cloud storage
+                                </p>
                                 
-                                <div className="flex items-center gap-3 mb-3">
-                                    <button
-                                        className={`btn btn-lg ${isRecording ? 'btn-destructive animate-pulse' : 'btn-primary'}`}
-                                        onClick={handleRecord}
-                                        style={{width: '60px', height: '60px'}}
-                                    >
-                                        {isRecording ? <SquareIcon size={20} /> : <MicIcon size={20} />}
-                                    </button>
-                                    
-                                    <div className="flex-1">
-                                        <div className="text-lg font-mono font-bold">
-                                            {formatTime(currentChunkTime)} / {formatTime(chunkDuration)}
+                                <div style={{
+                                    display: 'grid', 
+                                    gridTemplateColumns: window.innerWidth < 768 ? '1fr' : '1fr 1fr', 
+                                    gap: '2rem'
+                                }}>
+                                    {/* Recording Controls */}
+                                    <div style={{
+                                        background: '#ffffff',
+                                        borderRadius: '15px',
+                                        padding: '2rem',
+                                        boxShadow: '0 4px 25px rgba(0, 0, 0, 0.1)',
+                                        border: '1px solid #f0f0f0'
+                                    }}>
+                                        <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.5rem'}}>
+                                            <i className="fas fa-microphone" style={{color: '#667eea', fontSize: '1.2rem'}}></i>
+                                            <h3 style={{fontSize: '1.25rem', fontWeight: 'bold', margin: 0, color: '#333'}}>Recording Controls</h3>
                                         </div>
-                                        <div className="text-muted text-sm">
-                                            {isRecording ? `Chunk ${currentChunkNumber}` : "Ready"}
+                                
+                                        <div style={{display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem'}}>
+                                            <button
+                                                onClick={handleRecord}
+                                                style={{
+                                                    width: '60px', 
+                                                    height: '60px', 
+                                                    borderRadius: '50%',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    fontSize: '1.5rem',
+                                                    border: 'none',
+                                                    background: isRecording ? '#dc3545' : '#667eea',
+                                                    color: 'white',
+                                                    cursor: 'pointer',
+                                                    transition: 'all 0.2s ease',
+                                                    animation: isRecording ? 'pulse 1.5s infinite' : 'none'
+                                                }}
+                                                onMouseEnter={(e) => {
+                                                    if (!isRecording) {
+                                                        e.target.style.background = '#5a67d8';
+                                                        e.target.style.transform = 'scale(1.05)';
+                                                    }
+                                                }}
+                                                onMouseLeave={(e) => {
+                                                    if (!isRecording) {
+                                                        e.target.style.background = '#667eea';
+                                                        e.target.style.transform = 'scale(1)';
+                                                    }
+                                                }}
+                                            >
+                                                {isRecording ? <SquareIcon size={24} /> : <MicIcon size={24} />}
+                                            </button>
+                                            
+                                            <div style={{flex: 1}}>
+                                                <div style={{fontSize: '1.25rem', fontFamily: 'monospace', fontWeight: 'bold', color: '#333'}}>
+                                                    {formatTime(currentChunkTime)} / {formatTime(chunkDuration)}
+                                                </div>
+                                                <div style={{fontSize: '0.9rem', color: '#666'}}>
+                                                    {isRecording ? `Chunk ${currentChunkNumber}` : "Ready to record"}
+                                                </div>
+                                                {isRecording && (
+                                                    <div style={{fontSize: '0.8rem', color: '#999'}}>
+                                                        Total: {formatTime(currentTime)} • {currentChunkRef.current} uploaded
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
-                                        {isRecording && (
-                                            <div className="text-muted text-xs">
-                                                Total: {formatTime(currentTime)} • {currentChunkRef.current} uploaded
+
+                                        <div style={{marginBottom: '1rem'}}>
+                                            <div style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem'}}>
+                                                <span style={{fontSize: '0.9rem', color: '#666'}}>Chunk Duration</span>
+                                                <span style={{
+                                                    background: '#667eea', 
+                                                    color: 'white', 
+                                                    padding: '0.25rem 0.5rem', 
+                                                    borderRadius: '12px',
+                                                    fontSize: '0.8rem',
+                                                    fontWeight: 'bold'
+                                                }}>{chunkDuration}s</span>
+                                            </div>
+                                            <input
+                                                type="range"
+                                                min="5"
+                                                max="300"
+                                                step="5"
+                                                value={chunkDuration}
+                                                onChange={(e) => setChunkDuration(parseInt(e.target.value))}
+                                                disabled={isRecording}
+                                                style={{
+                                                    width: '100%',
+                                                    height: '6px',
+                                                    borderRadius: '3px',
+                                                    background: '#e0e7ff',
+                                                    outline: 'none',
+                                                    marginBottom: '0.5rem'
+                                                }}
+                                            />
+                                            <div style={{display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: '#999'}}>
+                                                <span>5s</span>
+                                                <span>5min</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Recording Chunks */}
+                                    <div style={{
+                                        background: '#ffffff',
+                                        borderRadius: '15px',
+                                        padding: '2rem',
+                                        boxShadow: '0 4px 25px rgba(0, 0, 0, 0.1)',
+                                        border: '1px solid #f0f0f0'
+                                    }}>
+                                        <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.5rem'}}>
+                                            <i className="fas fa-waveform-lines" style={{color: '#667eea', fontSize: '1.2rem'}}></i>
+                                            <h3 style={{fontSize: '1.25rem', fontWeight: 'bold', margin: 0, color: '#333'}}>Recording Chunks</h3>
+                                            <span style={{
+                                                background: '#f0f0f0', 
+                                                color: '#666', 
+                                                padding: '0.25rem 0.5rem', 
+                                                borderRadius: '12px',
+                                                fontSize: '0.8rem',
+                                                marginLeft: 'auto'
+                                            }}>({recordings.length})</span>
+                                        </div>
+                                        
+                                        {sessionIdRef.current && (
+                                            <div style={{
+                                                background: '#f8f9ff', 
+                                                padding: '0.75rem', 
+                                                borderRadius: '8px', 
+                                                marginBottom: '1rem',
+                                                border: '1px solid #e0e7ff'
+                                            }}>
+                                                <div style={{fontSize: '0.9rem', color: '#667eea', fontWeight: '600', marginBottom: '0.25rem'}}>
+                                                    🔴 Recording Session
+                                                </div>
+                                                <div style={{fontSize: '0.8rem', color: '#6b7280', fontFamily: 'monospace'}}>
+                                                    {formatSessionDisplay(sessionIdRef.current)}
+                                                </div>
+                                            </div>
+                                        )}
+                                
+                                        <div style={{maxHeight: '400px', overflowY: 'auto'}}>
+                                            {recordings.length === 0 ? (
+                                                <div style={{
+                                                    textAlign: 'center',
+                                                    padding: '2rem',
+                                                    color: '#999',
+                                                    fontSize: '0.9rem'
+                                                }}>
+                                                    <i className="fas fa-play-circle" style={{fontSize: '2rem', marginBottom: '1rem', color: '#ccc'}}></i>
+                                                    <div>No audio chunks yet</div>
+                                                    <div>Start recording to see chunks appear here</div>
+                                                </div>
+                                            ) : (
+                                                recordings.map((recording) => (
+                                                    <div key={recording.id} style={{
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        padding: '1rem',
+                                                        borderRadius: '12px',
+                                                        marginBottom: '0.75rem',
+                                                        border: '1px solid #e5e7eb',
+                                                        background: '#ffffff',
+                                                        transition: 'all 0.2s ease',
+                                                        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+                                                        ':hover': {
+                                                            borderColor: '#d1d5db',
+                                                            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
+                                                        }
+                                                    }}
+                                                    onMouseEnter={(e) => {
+                                                        e.target.style.borderColor = '#d1d5db';
+                                                        e.target.style.boxShadow = '0 4px 6px rgba(0, 0, 0, 0.1)';
+                                                    }}
+                                                    onMouseLeave={(e) => {
+                                                        e.target.style.borderColor = '#e5e7eb';
+                                                        e.target.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.1)';
+                                                    }}>
+                                                        <button
+                                                            onClick={() => handlePlay(recording.id)}
+                                                            style={{
+                                                                width: '36px',
+                                                                height: '36px',
+                                                                borderRadius: '8px',
+                                                                border: '1px solid #e5e7eb',
+                                                                background: playingId === recording.id ? '#f3f4f6' : '#f9fafb',
+                                                                color: playingId === recording.id ? '#dc3545' : '#667eea',
+                                                                display: 'flex',
+                                                                alignItems: 'center',
+                                                                justifyContent: 'center',
+                                                                cursor: 'pointer',
+                                                                marginRight: '0.75rem',
+                                                                transition: 'all 0.2s ease',
+                                                                fontSize: '12px',
+                                                                boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)'
+                                                            }}
+                                                            onMouseEnter={(e) => {
+                                                                e.target.style.background = playingId === recording.id ? '#e5e7eb' : '#f3f4f6';
+                                                                e.target.style.borderColor = '#d1d5db';
+                                                                e.target.style.transform = 'translateY(-1px)';
+                                                                e.target.style.boxShadow = '0 4px 6px rgba(0, 0, 0, 0.1)';
+                                                            }}
+                                                            onMouseLeave={(e) => {
+                                                                e.target.style.background = playingId === recording.id ? '#f3f4f6' : '#f9fafb';
+                                                                e.target.style.borderColor = '#e5e7eb';
+                                                                e.target.style.transform = 'translateY(0)';
+                                                                e.target.style.boxShadow = '0 1px 2px rgba(0, 0, 0, 0.05)';
+                                                            }}
+                                                        >
+                                                            <i className={playingId === recording.id ? 'fas fa-pause' : 'fas fa-play'}></i>
+                                                        </button>
+                                                        
+                                                        <div style={{flex: 1}}>
+                                                            <div style={{fontWeight: '600', color: '#333', fontSize: '0.9rem'}}>
+                                                                {recording.name}
+                                                            </div>
+                                                            <div style={{fontSize: '0.75rem', color: '#666', display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
+                                                                <span>{recording.duration}s</span>
+                                                                <span>•</span>
+                                                                <span>{recording.size}MB</span>
+                                                                <span>•</span>
+                                                                <span style={{color: getSyncStatusColor(recording.syncStatus)}}>
+                                                                    {getSyncStatusIcon(recording.syncStatus)}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                        
+                                                        <button
+                                                            onClick={() => handleDelete(recording.id)}
+                                                            style={{
+                                                                width: '32px',
+                                                                height: '32px',
+                                                                borderRadius: '6px',
+                                                                border: '1px solid #e5e7eb',
+                                                                background: '#f9fafb',
+                                                                color: '#6b7280',
+                                                                cursor: 'pointer',
+                                                                display: 'flex',
+                                                                alignItems: 'center',
+                                                                justifyContent: 'center',
+                                                                fontSize: '11px',
+                                                                transition: 'all 0.2s ease',
+                                                                boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)'
+                                                            }}
+                                                            onMouseEnter={(e) => {
+                                                                e.target.style.background = '#fef2f2';
+                                                                e.target.style.color = '#dc3545';
+                                                                e.target.style.borderColor = '#fecaca';
+                                                                e.target.style.transform = 'translateY(-1px)';
+                                                                e.target.style.boxShadow = '0 4px 6px rgba(0, 0, 0, 0.1)';
+                                                            }}
+                                                            onMouseLeave={(e) => {
+                                                                e.target.style.background = '#f9fafb';
+                                                                e.target.style.color = '#6b7280';
+                                                                e.target.style.borderColor = '#e5e7eb';
+                                                                e.target.style.transform = 'translateY(0)';
+                                                                e.target.style.boxShadow = '0 1px 2px rgba(0, 0, 0, 0.05)';
+                                                            }}
+                                                            title="Delete chunk"
+                                                        >
+                                                            <i className="fas fa-trash"></i>
+                                                        </button>
+                                                    </div>
+                                                ))
+                                            )}
+                                        </div>
+                                        
+                                        {recordings.length > 0 && (
+                                            <div style={{
+                                                borderTop: '1px solid #f0f0f0',
+                                                paddingTop: '1rem',
+                                                marginTop: '1rem',
+                                                fontSize: '0.8rem',
+                                                color: '#666',
+                                                textAlign: 'center'
+                                            }}>
+                                                Total: {recordings.length} chunks • Started: {sessionIdRef.current ? formatSessionDisplay(sessionIdRef.current) : 'None'}
                                             </div>
                                         )}
                                     </div>
-                                </div>
-
-                                <div className="space-y-2">
-                                    <div className="flex items-center justify-between text-sm">
-                                        <span>Duration</span>
-                                        <span className="badge text-xs">{chunkDuration}s</span>
-                                    </div>
-                                    <input
-                                        type="range"
-                                        className="slider"
-                                        min="5"
-                                        max="300"
-                                        step="5"
-                                        value={chunkDuration}
-                                        onChange={(e) => setChunkDuration(parseInt(e.target.value))}
-                                        disabled={isRecording}
-                                        style={{'--value': `${((chunkDuration - 5) / (300 - 5)) * 100}%`}}
-                                    />
-                                    <div className="flex justify-between text-muted text-xs">
-                                        <span>5s</span>
-                                        <span>5min</span>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Recordings List - Compact */}
-                            <div className="card p-3">
-                                <div className="flex items-center justify-between mb-3">
-                                    <div className="flex items-center gap-2">
-                                        <span style={{fontSize: '14px'}}>🎵</span>
-                                        <h2 className="text-base font-bold">Session</h2>
-                                        <span className="badge text-xs">({recordings.length})</span>
-                                    </div>
-                                    
-                                    <select 
-                                        className="select" 
-                                        value={theme} 
-                                        onChange={(e) => setTheme(e.target.value)}
-                                        style={{width: 'auto', fontSize: '11px', padding: '3px 6px'}}
-                                    >
-                                        <option value="default">Gray</option>
-                                        <option value="dark">Dark</option>
-                                        <option value="purple">Purple</option>
-                                        <option value="green">Green</option>
-                                        <option value="blue">Blue</option>
-                                    </select>
-                                </div>
-                                
-                                <div className="space-y-1">
-                                    {recordings.map((recording) => (
-                                        <div key={recording.id} className="recording-item">
-                                            <div className="recording-col-left">
-                                                <div className="recording-name">{recording.name}</div>
-                                                <div className="recording-date">
-                                                    {recording.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                                                </div>
-                                            </div>
-                                            
-                                            <div className="recording-col-right">
-                                                <div className="recording-metadata">
-                                                    <span style={{color: getSyncStatusColor(recording.syncStatus)}}>
-                                                        {getSyncStatusIcon(recording.syncStatus)}
-                                                    </span>
-                                                    <span>{recording.duration}s • {(recording.size * 1000).toFixed(0)}KB</span>
-                                                </div>
-                                                <div className="recording-actions">
-                                                    <button
-                                                        className="btn btn-outline icon-btn"
-                                                        onClick={() => handlePlay(recording.id)}
-                                                    >
-                                                        {playingId === recording.id ? <PauseIcon /> : <PlayIcon />}
-                                                    </button>
-                                                    <button 
-                                                        className="btn btn-outline icon-btn"
-                                                        onClick={() => handleDelete(recording.id)}
-                                                    >
-                                                        <TrashIcon />
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ))}
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
+            );
+        }
+
+        // Floating Action Button Component with inline styles for React compatibility
+        function FloatingActionButton() {
+            const FolderIcon = () => (
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                    <path d="M2 7h20"/>
+                </svg>
+            );
+            
+            return (
+                <a href="/?goto=files" 
+                   title="Back to Files"
+                   style={{
+                       position: 'fixed',
+                       bottom: '24px',
+                       right: '24px',
+                       width: '64px',
+                       height: '64px',
+                       borderRadius: '50%',
+                       background: 'white',
+                       color: '#6b7280',
+                       border: '2px solid #e5e7eb',
+                       boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+                       display: 'flex',
+                       alignItems: 'center',
+                       justifyContent: 'center',
+                       textDecoration: 'none',
+                       zIndex: 1000,
+                       transition: 'all 0.2s ease'
+                   }}
+                   onMouseEnter={(e) => {
+                       e.target.style.transform = 'scale(1.05)';
+                       e.target.style.boxShadow = '0 6px 16px rgba(0, 0, 0, 0.15)';
+                   }}
+                   onMouseLeave={(e) => {
+                       e.target.style.transform = 'scale(1)';
+                       e.target.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.1)';
+                   }}
+                >
+                    <FolderIcon />
+                </a>
             );
         }
 
@@ -769,8 +1114,15 @@
             
             if (typeof React !== 'undefined' && typeof ReactDOM !== 'undefined' && typeof AudioRecorderApp !== 'undefined') {
                 try {
+                    // Render both the main app and the FAB
                     ReactDOM.render(React.createElement(AudioRecorderApp), document.getElementById('root'));
-                    console.log('AudioRecorderApp rendered successfully');
+                    
+                    // Add FAB to body
+                    const fabContainer = document.createElement('div');
+                    document.body.appendChild(fabContainer);
+                    ReactDOM.render(React.createElement(FloatingActionButton), fabContainer);
+                    
+                    console.log('AudioRecorderApp and FAB rendered successfully');
                 } catch (error) {
                     console.error('Error rendering AudioRecorderApp:', error);
                 }

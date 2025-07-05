@@ -2,6 +2,14 @@
 
 const AWS = require('aws-sdk');
 const s3 = new AWS.S3();
+const { 
+  generateChunkPath, 
+  generateSessionPaths, 
+  updateSessionMetadata, 
+  getSessionMetadata,
+  initializeSessionStructure,
+  createDefaultSessionMetadata 
+} = require('./session-helpers');
 
 // Generate pre-signed URL for audio chunk upload
 module.exports.uploadChunk = async (event) => {
@@ -60,12 +68,8 @@ module.exports.uploadChunk = async (event) => {
       };
     }
 
-    // Create timestamp-based session folder
-    const timestamp = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-    const paddedChunkNumber = chunkNumber.toString().padStart(3, '0');
-    
-    // Build S3 key with user isolation
-    const s3Key = `users/${userId}/audio/sessions/${timestamp}-${sanitizedSessionId}/chunk-${paddedChunkNumber}.webm`;
+    // Generate S3 key using helper function
+    const s3Key = generateChunkPath(userId, sanitizedSessionId, chunkNumber, duration || 5);
     
     console.log(`Generating upload URL for chunk ${chunkNumber} of session ${sanitizedSessionId}`);
 
@@ -147,39 +151,57 @@ module.exports.updateSessionMetadata = async (event) => {
     const sanitizedSessionId = sessionId.replace(/[^a-zA-Z0-9\-_]/g, '');
     const timestamp = new Date().toISOString().split('T')[0];
     
-    // Build metadata S3 key
-    const metadataKey = `users/${userId}/audio/sessions/${timestamp}-${sanitizedSessionId}/metadata.json`;
+    // Get session paths
+    const paths = generateSessionPaths(userId, sanitizedSessionId);
     
-    // Prepare metadata object with additional fields for future consciousness features
-    const fullMetadata = {
-      sessionId: sanitizedSessionId,
-      userId: userId,
-      userEmail: email,
-      createdAt: metadata.createdAt || new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      duration: metadata.duration || 0,
-      chunkCount: metadata.chunkCount || 0,
-      chunkDuration: metadata.chunkDuration || 5,
-      status: metadata.status || 'recording',
-      transcriptionStatus: 'pending',
-      // Fields for future memory/consciousness features
-      summary: metadata.summary || '',
-      keywords: metadata.keywords || [],
-      conversationContext: metadata.conversationContext || '',
-      previousSession: metadata.previousSession || null,
-      nextSession: null,
-      ...metadata
-    };
+    // Try to get existing metadata, or create new
+    let sessionMetadata;
+    try {
+      sessionMetadata = await getSessionMetadata(bucketName, userId, sanitizedSessionId);
+      
+      // Update existing metadata
+      const updates = {
+        audio: {
+          ...sessionMetadata.audio,
+          duration: metadata.duration || sessionMetadata.audio.duration,
+          chunkCount: metadata.chunkCount || sessionMetadata.audio.chunkCount,
+          chunkDuration: metadata.chunkDuration || sessionMetadata.audio.chunkDuration
+        },
+        metadata: {
+          ...sessionMetadata.metadata,
+          title: metadata.title || sessionMetadata.metadata.title,
+          description: metadata.description || sessionMetadata.metadata.description,
+          tags: metadata.tags || sessionMetadata.metadata.tags,
+          participants: metadata.participants || sessionMetadata.metadata.participants,
+          location: metadata.location || sessionMetadata.metadata.location,
+          // Legacy fields
+          summary: metadata.summary || sessionMetadata.metadata.summary,
+          keywords: metadata.keywords || sessionMetadata.metadata.keywords,
+          conversationContext: metadata.conversationContext || sessionMetadata.metadata.conversationContext
+        }
+      };
+      
+      sessionMetadata = await updateSessionMetadata(bucketName, userId, sanitizedSessionId, updates);
+    } catch (error) {
+      // Create new session if doesn't exist
+      const sessionOptions = {
+        userEmail: email,
+        chunkDuration: metadata.chunkDuration || 5,
+        title: metadata.title || '',
+        description: metadata.description || '',
+        tags: metadata.tags || [],
+        participants: metadata.participants || [],
+        location: metadata.location || '',
+        summary: metadata.summary || '',
+        keywords: metadata.keywords || [],
+        conversationContext: metadata.conversationContext || ''
+      };
+      
+      const result = await initializeSessionStructure(bucketName, userId, sanitizedSessionId, sessionOptions);
+      sessionMetadata = result.sessionMetadata;
+    }
 
-    // Upload metadata to S3
-    await s3.putObject({
-      Bucket: bucketName,
-      Key: metadataKey,
-      Body: JSON.stringify(fullMetadata, null, 2),
-      ContentType: 'application/json'
-    }).promise();
-
-    console.log(`Updated metadata for session ${sanitizedSessionId}`);
+    console.log(`Updated session metadata for session ${sanitizedSessionId}`);
 
     return {
       statusCode: 200,
@@ -190,7 +212,7 @@ module.exports.updateSessionMetadata = async (event) => {
       body: JSON.stringify({
         message: 'Session metadata updated successfully',
         sessionId: sanitizedSessionId,
-        metadataKey: metadataKey,
+        sessionKey: paths.sessionFile,
         timestamp: new Date().toISOString()
       }),
     };
@@ -238,22 +260,16 @@ module.exports.listSessions = async (event) => {
     // Extract session folders from CommonPrefixes
     const sessions = [];
     if (s3Response.CommonPrefixes) {
-      for (const prefix of s3Response.CommonPrefixes) {
-        const sessionFolder = prefix.Prefix.split('/').slice(-2)[0]; // Get folder name
+      for (const prefixObj of s3Response.CommonPrefixes) {
+        const sessionFolder = prefixObj.Prefix.split('/').slice(-2)[0]; // Get folder name
         
-        // Try to load metadata for each session
+        // Try to load session metadata using helper function
         try {
-          const metadataKey = `${prefix.Prefix}metadata.json`;
-          const metadataObj = await s3.getObject({
-            Bucket: bucketName,
-            Key: metadataKey
-          }).promise();
-          
-          const metadata = JSON.parse(metadataObj.Body.toString());
+          const sessionMetadata = await getSessionMetadata(bucketName, userId, sessionFolder);
           sessions.push({
-            sessionId: metadata.sessionId,
+            sessionId: sessionMetadata.sessionId,
             folder: sessionFolder,
-            metadata: metadata
+            metadata: sessionMetadata
           });
         } catch (err) {
           // If no metadata, just include basic info
@@ -329,33 +345,32 @@ module.exports.getFailedChunks = async (event) => {
     
     const bucketName = process.env.S3_BUCKET_NAME;
     const sanitizedSessionId = sessionId.replace(/[^a-zA-Z0-9\-_]/g, '');
-    const timestamp = new Date().toISOString().split('T')[0];
-    const prefix = `users/${userId}/audio/sessions/${timestamp}-${sanitizedSessionId}/`;
+    const paths = generateSessionPaths(userId, sanitizedSessionId);
     
     // List existing chunks
     const s3Response = await s3.listObjectsV2({
       Bucket: bucketName,
-      Prefix: prefix
+      Prefix: paths.chunksPath
     }).promise();
     
     const existingChunks = (s3Response.Contents || [])
-      .filter(obj => obj.Key.includes('chunk-'))
+      .filter(obj => obj.Key.includes('.webm'))
       .map(obj => {
-        const match = obj.Key.match(/chunk-(\d+)\.webm$/);
-        return match ? parseInt(match[1]) : null;
+        // Extract chunk number from timestamp format: 00000-00005.webm
+        const match = obj.Key.match(/(\d{5})-(\d{5})\.webm$/);
+        if (match) {
+          const startTime = parseInt(match[1]);
+          const chunkDuration = parseInt(match[2]) - startTime;
+          return Math.floor(startTime / chunkDuration) + 1;
+        }
+        return null;
       })
       .filter(num => num !== null);
     
-    // Get metadata to know expected chunks
+    // Get session metadata to know expected chunks
     try {
-      const metadataKey = `${prefix}metadata.json`;
-      const metadataObj = await s3.getObject({
-        Bucket: bucketName,
-        Key: metadataKey
-      }).promise();
-      
-      const metadata = JSON.parse(metadataObj.Body.toString());
-      const expectedChunks = metadata.chunkCount || 0;
+      const sessionData = await getSessionMetadata(bucketName, userId, sanitizedSessionId);
+      const expectedChunks = sessionData.audio?.chunkCount || 0;
       
       // Find missing chunks
       const missingChunks = [];
