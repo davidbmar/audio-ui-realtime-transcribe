@@ -2,21 +2,29 @@
 
 A serverless platform for intelligent audio recording with real-time transcription, analysis, and semantic search capabilities. Built for meeting intelligence, conversation analysis, and AI memory applications.
 
-## 🚀 Key Features
+## 🚀 Current Features (Phase 1 Complete)
 
-### Core Capabilities
+### ✅ Implemented Core Capabilities
 - **🎤 Smart Audio Recording**: Browser-based chunked recording with configurable durations (5s-5min)
-- **📝 Live Transcription**: Real-time Whisper-powered transcription with <10s latency
-- **🧠 Intelligent Analysis**: Automatic topic extraction, decision detection, and entity recognition
-- **🔍 Semantic Search**: RAG-enabled search across active and historical recordings
-- **⏯️ Context-Aware Playback**: Instantly jump to relevant audio segments based on content
+- **📱 Mobile-Optimized UI**: Touch-friendly interface with iOS action sheets and responsive design
+- **🎵 Audio Playback**: Direct .webm file playback with modal player interface
+- **📁 Intelligent File Management**: Session-based organization with human-readable timestamps
+- **🔄 FAB Navigation**: Floating action button for seamless navigation between pages
+- **🏗️ Serverless Infrastructure**: AWS Lambda, S3, CloudFront, and Cognito integration
+- **🔐 User Authentication**: Secure Cognito-based auth with user-isolated storage
 
-### Advanced Features
-- **Real-time Dashboard**: Live view of topics, decisions, and key moments during recording
-- **Speaker Diarization**: Identify and track different speakers
-- **Meeting Intelligence**: Automatic action items and decision tracking
-- **Time-Indexed Storage**: Direct timestamp access to any moment
-- **Parallel Processing**: Simultaneous transcription and analysis
+### 🎯 Advanced UX Features
+- **Human-Readable Sessions**: Displays `2025.07JUL.04-22:28:05` instead of cryptic timestamps
+- **Smart Sorting**: Newest recording sessions appear first automatically
+- **Mobile Action Sheets**: Native iOS-style action menus for file operations
+- **Real-time File Operations**: Upload, download, rename, move, and delete with instant feedback
+- **Progressive Audio Loading**: Chunked audio upload with resumable capabilities
+
+### 🔮 Planned Features (Phase 2)
+- **📝 Live Transcription**: Real-time Whisper-powered transcription with <10s latency
+- **🧠 Intelligent Analysis**: Automatic topic extraction, decision detection, and entity recognition  
+- **🔍 Semantic Search**: RAG-enabled search across active and historical recordings
+- **⏯️ Context-Aware Playback**: Jump to relevant audio segments based on content
 
 ## 🏗️ Architecture Overview
 
@@ -36,21 +44,25 @@ Frontend (React + WebSocket) → API Gateway → Lambda Functions
 ## 📁 Project Structure
 
 ```
-audio-intelligence-platform/
+audio-ui-realtime-transcribe/
 ├── api/                    # Lambda functions
-│   ├── recording/         # Audio upload & management
-│   ├── transcription/     # Whisper integration
-│   ├── analysis/          # NLP & topic extraction
-│   └── search/            # RAG & semantic search
-├── web/                   # React frontend
-│   ├── src/
-│   │   ├── components/    # UI components
-│   │   ├── hooks/         # Custom React hooks
-│   │   └── services/      # API & WebSocket clients
-│   └── public/
-├── infrastructure/        # AWS resource definitions
-├── scripts/              # Deployment automation
-└── docs/                 # Additional documentation
+│   ├── audio.js           # Audio upload & session management ✅
+│   ├── s3.js              # File operations (CRUD) ✅
+│   ├── data.js            # API testing endpoint ✅
+│   ├── memory.js          # Memory storage (future use) ✅
+│   ├── session-helpers.js # Session utilities ✅
+│   └── transcription.js   # Whisper integration (planned)
+├── web/                   # Frontend application
+│   ├── index.html         # File manager interface ✅
+│   ├── audio.html.template # Audio recorder (React) ✅
+│   ├── app.js.template    # Main application logic ✅
+│   ├── styles.css         # Main UI styles ✅
+│   ├── audio-ui-styles.css # Audio-specific styles ✅
+│   └── callback.html      # OAuth callback handler ✅
+├── step-*.sh              # Deployment scripts ✅
+├── 001-plan.md           # Transcription implementation plan ✅
+├── serverless.yml        # AWS resource definitions ✅
+└── test-*.sh             # Testing utilities ✅
 ```
 
 ## 🚀 Quick Start
@@ -65,24 +77,34 @@ audio-intelligence-platform/
 
 1. **Clone the repository**
 ```bash
-git clone https://github.com/yourusername/audio-intelligence-platform.git
-cd audio-intelligence-platform
+git clone https://github.com/davidbmar/audio-ui-realtime-transcribe.git
+cd audio-ui-realtime-transcribe
 ```
 
 2. **Run setup scripts in order**
 ```bash
-chmod +x scripts/step-*.sh
-./scripts/step-10-setup.sh              # Initial configuration
-./scripts/step-20-deploy-core.sh        # Deploy core infrastructure
-./scripts/step-30-deploy-frontend.sh    # Deploy web interface
-./scripts/step-40-enable-realtime.sh    # Enable WebSocket features
+chmod +x step-*.sh
+./step-10-setup.sh              # Initial AWS configuration
+./step-20-deploy-lambda.sh      # Deploy Lambda functions
+./step-25-update-web-files.sh   # Deploy web files with env substitution
+./step-30-deploy-memory.sh      # Deploy memory API (optional)
+./step-45-validation.sh         # Validate deployment
+./step-47-test-apis.sh          # Test API endpoints
 ```
 
 3. **Access your platform**
 ```
-Frontend: https://your-cloudfront-distribution.cloudfront.net
-WebSocket: wss://your-api-gateway.execute-api.region.amazonaws.com/prod
+File Manager: https://your-cloudfront-distribution.cloudfront.net
+Audio Recorder: https://your-cloudfront-distribution.cloudfront.net/audio.html
 ```
+
+### Current Deployment Status ✅
+- ✅ **Core Infrastructure**: Lambda, S3, CloudFront, Cognito
+- ✅ **Audio Recording**: Session-based chunked upload system
+- ✅ **File Management**: Full CRUD operations with mobile UX
+- ✅ **Authentication**: Cognito JWT with user isolation
+- ✅ **Audio Playback**: Modal player for .webm files
+- 🔄 **Transcription**: Planned for Phase 2
 
 ## 💡 Usage Examples
 
@@ -149,23 +171,35 @@ ENABLE_SPEAKER_DIARIZATION=false
 
 ## 📊 Storage Structure
 
-Time-indexed organization for instant access:
+Session-based organization with timestamp indexing:
 ```
 s3://your-bucket/
-└── users/{userId}/audio/sessions/{sessionId}/
-    ├── manifest.json                 # Session metadata
-    ├── chunks/
-    │   ├── 00000-00005.webm         # 0-5 seconds
-    │   ├── 00005-00010.webm         # 5-10 seconds
-    │   └── ...
-    ├── transcripts/
-    │   ├── 00000-00005.json         # Matching transcripts
-    │   └── rolling.json             # Complete transcript
-    └── analysis/
-        ├── timeline.json            # Topic progression
-        ├── decisions.json           # Detected decisions
-        └── summaries/               # Periodic summaries
+└── users/{userId}/audio/
+    ├── sessions/
+    │   ├── 202507JUL04-222805/     # Human-readable session names
+    │   │   ├── session.json        # Session metadata ✅
+    │   │   ├── chunks/
+    │   │   │   ├── 00000-00005.webm # 0-5 seconds ✅
+    │   │   │   ├── 00005-00010.webm # 5-10 seconds ✅
+    │   │   │   └── ...
+    │   │   ├── transcripts/         # Planned Phase 2
+    │   │   │   ├── 00000-00005.json # Matching transcripts
+    │   │   │   └── rolling.json     # Complete transcript
+    │   │   └── analysis/            # Planned Phase 3
+    │   │       ├── timeline.json    # Topic progression
+    │   │       ├── decisions.json   # Detected decisions
+    │   │       └── summaries/       # Periodic summaries
+    │   └── 202507JUL04-223524/     # Another session
+    └── files/                       # General file storage ✅
+        ├── documents/
+        ├── images/
+        └── archives/
 ```
+
+### Session Naming Convention ✅
+- **Raw Format**: `202507JUL04-222805` (stored)
+- **Display Format**: `2025.07JUL.04-22:28:05` (UI)
+- **Auto-sorted**: Newest sessions first
 
 ## 🛠️ Development
 
@@ -233,34 +267,52 @@ Cost-saving features:
 - Batch processing for non-real-time analysis
 - S3 lifecycle policies
 
-## 🗺️ Roadmap
+## 🗺️ Roadmap & Progress
 
-### Phase 1: Core Platform ✅
-- [x] Audio recording and chunked upload
-- [x] User authentication
-- [x] Basic storage structure
+### ✅ Phase 1: Core Platform (COMPLETED - Dec 2024)
+- [x] **Audio Recording**: Chunked upload system with 5s-5min configurable chunks
+- [x] **User Authentication**: AWS Cognito with JWT tokens and user isolation  
+- [x] **File Management**: Complete CRUD operations with mobile-optimized UI
+- [x] **Session Organization**: Timestamp-based storage with human-readable names
+- [x] **Audio Playback**: Modal player for .webm files with progress controls
+- [x] **Mobile UX**: Touch-friendly interface with iOS action sheets
+- [x] **FAB Navigation**: Seamless navigation between file manager and recorder
+- [x] **Serverless Infrastructure**: AWS Lambda, S3, CloudFront deployment
+- [x] **Smart Sorting**: Newest sessions first with intelligent file organization
 
-### Phase 2: Transcription (In Progress)
-- [ ] Whisper integration
-- [ ] Real-time transcription display
-- [ ] Transcript search
+### 🔄 Phase 2: Transcription (NEXT - Q1 2025)
+- [ ] **Whisper Integration**: OpenAI Whisper API for audio transcription
+- [ ] **Real-time Display**: Live transcription updates during recording
+- [ ] **Transcript Storage**: JSON-based transcript storage structure
+- [ ] **Search Functionality**: Basic text search across transcripts
+- [ ] **Transcript Export**: Download transcripts in multiple formats
 
-### Phase 3: Intelligence Features
-- [ ] Topic extraction
-- [ ] Decision detection
-- [ ] Entity recognition
-- [ ] Meeting summaries
+### 📋 Phase 3: Intelligence Features (Q2 2025)
+- [ ] **Topic Extraction**: Automatic topic identification and tagging
+- [ ] **Decision Detection**: AI-powered decision point identification
+- [ ] **Entity Recognition**: People, places, organizations extraction
+- [ ] **Meeting Summaries**: AI-generated session summaries
+- [ ] **Timeline Analysis**: Visual progression of conversation topics
 
-### Phase 4: Advanced Search
-- [ ] Vector embeddings
-- [ ] Semantic search
-- [ ] Context-aware playback
+### 🔍 Phase 4: Advanced Search (Q3 2025)
+- [ ] **Vector Embeddings**: Semantic understanding of audio content
+- [ ] **RAG Integration**: Retrieval-augmented generation for queries
+- [ ] **Context-Aware Playback**: Jump to relevant audio segments
+- [ ] **Cross-Session Search**: Search across multiple recording sessions
 
-### Phase 5: Enterprise Features
-- [ ] Team collaboration
-- [ ] Custom vocabularies
-- [ ] API for third-party integrations
-- [ ] Advanced analytics
+### 🏢 Phase 5: Enterprise Features (Q4 2025)
+- [ ] **Team Collaboration**: Shared sessions and permissions
+- [ ] **Custom Vocabularies**: Domain-specific transcription accuracy
+- [ ] **API Integration**: Third-party app integration capabilities
+- [ ] **Advanced Analytics**: Usage patterns and insights dashboard
+
+### 📈 Recent Accomplishments (January 2025)
+- ✅ **Session Name Formatting**: Implemented human-readable timestamps
+- ✅ **Audio Player Enhancement**: Fixed duration display and improved UX  
+- ✅ **Mobile Action Sheets**: Added native iOS-style interaction patterns
+- ✅ **Smart File Sorting**: Newest sessions automatically appear first
+- ✅ **Bug Fixes**: Resolved audio player "Infinity:NaN" display issue
+- ✅ **Code Organization**: Clean separation of concerns and helper functions
 
 ## 🤝 Contributing
 
